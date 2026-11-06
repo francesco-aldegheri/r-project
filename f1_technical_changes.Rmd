@@ -1,0 +1,422 @@
+---
+title: "Impact of Technical Changes on F1 Car Performance"
+output: html_document
+---
+
+Formula 1 (F1) is renowned for being at the pinnacle of motorsport technology and engineering. The performance of an F1 car is influenced by a myriad of factors, from aerodynamics and power unit advancements to tire performance and driver skill. Understanding how technical changes affect these high-performance machines is crucial for teams striving for competitive advantage.
+
+In this project, we aim to analyze how various technological innovations impact the performance of F1 cars. By leveraging data analysis and programming techniques, we will delve into both qualifying and race data to draw meaningful insights. This will involve a detailed examination of telemetry data from the fastest qualifying laps and a comprehensive analysis of race performance consistency over time.
+
+Objectives
+
+- Telemetry Analysis of Qualifying Laps: • Extract and analyze telemetry data from the fastest qualifying laps. • Identify key performance metrics such as maximum speed, lap time, and acceleration profiles. • Correlate these metrics with specific technical changes introduced in the cars.
+- Race Performance Analysis: • Investigate race data to evaluate the consistency of performance across different technological eras. • Examine factors such as lap time variation, pit stop efficiency, and overall race strategy execution. • Determine how technological advancements contribute to improved consistency and reliability.
+
+Expected Outcomes
+
+By the end of this project, we expect to have a detailed understanding of how technological advancements influence the performance of F1 cars. This includes identifying key innovations that have led to significant improvements in speed, consistency, and reliability. Our findings will not only contribute to the academic and engineering communities but also provide valuable insights for F1 teams and enthusiasts.
+
+Analysis of Qualifying Performance :A Comparative Study
+
+Qualifying sessions in Formula 1 are critical, as they determine the starting grid for the race. The performance during these sessions is a direct reflection of a car’s ultimate speed and efficiency, influenced by numerous technological and engineering factors. In this part of our project, we will focus on analyzing and comparing the qualifying performance data from two distinct years. By examining specific metrics, we aim to understand how technological advancements have impacted the performance of F1 cars over time. Objectives
+
+The primary goal of this analysis is to compare the qualifying performance of F1 cars from two different years. We will focus on the following key metrics: 1. Average RPM (Revolutions Per Minute): This metric provides insights into the engine’s performance and efficiency. 2. Maximum Speed: The highest speed achieved during the qualifying lap, indicating the car’s aerodynamic efficiency and power. 3. Average Time Throttle: The average time the driver spends with the throttle fully open, reflecting the car’s power delivery and drivability. 4. Final Lap Time: The total time taken to complete the fastest qualifying lap, summarizing the overall performance.
+
+Analysis of Race Performance : Consistency and Speed Dynamics
+
+While qualifying sessions showcase the peak performance of an F1 car over a single lap, race performance provides a more comprehensive picture of a car’s capabilities and reliability under varying conditions. In this part of our project, we will analyze race data to understand how technological advancements have affected the consistency and speed dynamics of F1 cars. By focusing on the standard deviation of lap times and the mean speed at specific throttle positions, we aim to gain insights into how innovations have improved race performance over time. Objectives The primary goal of this analysis is to assess the impact of technological changes on the consistency and speed dynamics of F1 cars during races. We will focus on the following key metrics: 1. Standard Deviation of Lap Times: This metric will help us evaluate the consistency of race performance, excluding outliers (lap times exceeding 110% of the fastest lap time). 2. Mean Speed at Specific Throttle Positions: By analyzing the mean speed at various throttle positions, we can understand the relationship between throttle input and speed, reflecting improvements in power delivery and control.
+
+```{r}
+#first, we install all the packages we need
+library(f1dataR)
+```
+
+```{r}
+setup_fastf1()
+```
+
+```{r}
+library(dplyr)
+```
+
+```{r}
+library(ggplot2)
+library(readxl)
+```
+
+## Technical Changes in Formula 1 from 2020 to 2021
+
+The 2021 Formula 1 season introduced several significant technical changes aimed at improving safety, performance, and the competitive balance among teams. These changes affected various aspects of the cars, from aerodynamic components to the minimum weight regulations and tire specifications
+
+Changes to the Cars’ Floors One of the most noticeable changes in 2021 was the alteration to the car floors. In previous years, the visible part of the floors featured various longitudinal and lateral slots. These slots were instrumental for teams in enhancing downforce near the floor edges by creating stronger suction underneath the car and refining the vortex at the floor edge, thus improving the ground effect. However, for 2021, regulations mandated the elimination of these slots, requiring the entire floor to be solid. Additionally, the new regulations introduced triangular cutaways at the rear of the floors, further reducing the downforce-generating surface area. These changes aimed to decrease the overall downforce and improve safety by making the cars more stable. Increase in Minimum Weights Another notable change was the increase in the minimum weights of both the cars and their power units. The minimum weight of the cars in their unfueled state rose from 746 kg in 2020 to 752 kg in 2021. Similarly, the minimum weight of the power units increased from 145 kg in 2020 to 150 kg in 2021. This adjustment aimed to discourage teams from using exotic and potentially unsafe weight-saving materials, promoting a more level playing field and enhancing safety. Pirelli, the official tire supplier for Formula 1, introduced more durable tire compounds for the 2021 season. This decision followed significant cornering forces observed during the 2020 season, which led to three tire failures at the British Grand Prix. The new compounds were designed to enhance the tires’ construction, providing greater integrity and durability. Despite the anticipated downforce reductions of around 10% due to aerodynamic changes, teams were expected to regain approximately 5% through winter development Expectation
+
+The technical changes introduced for the 2021 Formula 1 season are expected to have a significant impact on car performance. These modifications, aimed at enhancing safety and leveling the competitive field, will influence various aspects of the cars’ behavior on track. Here, we outline the anticipated changes in performance due to the new regulations. Reduced Downforce: Solid Floors: The elimination of longitudinal and lateral slots in the car floors is expected to reduce downforce. Previously, these slots enhanced suction under the car and refined edge vortices, contributing to ground effect. With solid floors, teams will experience lower aerodynamic efficiency, particularly at the floor edges. Impact on Lap Times: The reduction in downforce is likely to result in slower lap times, as cars will have less grip and stability, particularly in corners. Drivers will need to adapt their driving styles to manage these changes, potentially leading to more variability in lap times. The additional weight may lead to slightly slower acceleration and deceleration, as well as increased tire wear. Teams will need to adjust their setups to optimize performance under these new weight constraints.
+
+QUALIFICA 2020-2021
+
+```{r}
+# We will upload the telemetry data from Hamilton's qualifying session in Bahrain 2020.
+telemetry_data_hamilton_2020 <- load_driver_telemetry( 
+  season = 2020, 
+  round = 15,  # Bahrain GP
+  session = "Q",  # Qualifying
+  driver = "HAM",
+  log_level = "WARNING"
+)
+
+# Now we will follow the same process for Verstappen in 2021.
+telemetry_data_verstappen_2021 <- load_driver_telemetry(
+  season = 2021,
+  round = 1,  # Bahrain GP
+  session = "Q",  # Qualifying
+  driver = "VER",
+  log_level = "WARNING"
+)
+
+#Extract the measurements that we want using metrics for both Verstappen and Hamilton.
+metrics_verstappen_2021 <- c(
+  final_time = max(telemetry_data_verstappen_2021$time),
+  avg_rpm = mean(telemetry_data_verstappen_2021$rpm),
+  avg_throttle_time = mean(telemetry_data_verstappen_2021$throttle),
+  max_speed = max(telemetry_data_verstappen_2021$speed)
+)
+metrics_hamilton_2020 <- c(
+  final_time = max(telemetry_data_hamilton_2020$time),
+  avg_rpm = mean(telemetry_data_hamilton_2020$rpm),
+  avg_throttle_time = mean(telemetry_data_hamilton_2020$throttle),
+  max_speed = max(telemetry_data_hamilton_2020$speed)
+)
+
+# Compute a data frame to unify the results.
+df <- data.frame(
+  Pilot = c("Verstappen 2021", "Hamilton 2020"),
+  Final_Time = c(metrics_verstappen_2021["final_time"], metrics_hamilton_2020["final_time"]),
+  Avg_RPM = c(metrics_verstappen_2021["avg_rpm"], metrics_hamilton_2020["avg_rpm"]),
+  Avg_Throttle_Time = c(metrics_verstappen_2021["avg_throttle_time"], metrics_hamilton_2020["avg_throttle_time"]),
+  Max_Speed = c(metrics_verstappen_2021["max_speed"], metrics_hamilton_2020["max_speed"])
+)
+df
+```
+
+```{r}
+#Create a graph where we compare the throttle opening throughout the lap.
+ham <- telemetry_data_hamilton_2020
+
+ver <- telemetry_data_verstappen_2021
+
+data <- bind_rows(ham, ver )
+
+ggplot(data, aes(distance, throttle, color = driver_code)) +
+  geom_line() +
+  theme_minimal()
+```
+
+```{r}
+# Then we do the same type of graph for the gear
+ggplot(data, aes(distance, n_gear, color = driver_code)) +
+  geom_line() +
+  theme_minimal()
+```
+
+The comparison between Hamilton’s 2020 performance and Verstappen’s 2021 performance highlights how technical and regulatory changes can impact car behavior and driver performance. Hamilton’s higher average RPM, faster lap time, longer throttle application, and higher maximum speed suggest a more powerful and aerodynamically efficient car in 2020. In contrast, the 2021 regulations aimed to reduce downforce and potentially increase reliability, leading to lower RPM, slightly slower lap times, and reduced top speeds for Verstappen.
+
+GARA 2020-2021
+
+```{r}
+# Uploading the data from the Excel file "Datasetf1.xlsx.
+Datasetf1 <- read_xlsx("Datasetf1.xlsx")
+```
+
+```{r}
+# We filtered the data to exclude the outlier (over 110%) for Hamilton in 2020.
+Metrics_race_hamilton2020 <- 
+  fastest_ham20_R <- min(Datasetf1$time_ham20)
+
+upper_limit <- 1.1 * fastest_ham20_R
+
+
+filtered_data_ham20 <- Datasetf1[Datasetf1$time_ham20 <= upper_limit, ]
+
+#Calculate the average lap time and the standard deviation.
+average_lap_time_ham20 <- mean(filtered_data_ham20$time_ham20)
+
+standard_deviation_ham20_R <- sd(filtered_data_ham20$time_ham20)
+
+#Do the same thing for Hamilton in 2021.
+Metrics_race_hamilton_2021 <- 
+  fastest_ham21_R <- min(Datasetf1$time_ham21)
+upper_limit_ham21 <- 1.1 * fastest_ham21_R
+filtered_data_ham21 <- Datasetf1[Datasetf1$time_ham21 <= upper_limit, ]
+ 
+average_lap_time_ham21 <- mean(filtered_data_ham21$time_ham21) 
+standard_deviation_ham21_R <- sd(filtered_data_ham21$time_ham21)
+
+#Create the data frame to compare the data.
+df <- data.frame(
+  Pilot = c("Hamilton 2021", "Hamilton 2020"),
+  Average_Lap_Time= c(average_lap_time_ham21, average_lap_time_ham20),
+  Standard_Deviation= c(standard_deviation_ham21_R, standard_deviation_ham20_R))
+print(df)
+```
+
+```{r}
+#Insert a graph where we compare the race pace of Hamilton in 2020 (white) and Hamilton in 2021 (red) 
+ gfg_plot <- ggplot() +   
+  geom_line(data = Datasetf1, aes(x = laps, y = time_ham20), color = "white") + 
+  geom_line(data = Datasetf1, aes(x = laps, y = time_ham21), color = "red") +
+  theme_dark_f1(axis_marks = TRUE) +
+  labs(x = "Lap Number", y = "Time (seconds)")
+gfg_plot
+```
+
+```{r}
+#Use filter and group by to see the mean speed of the drivers at a certain throttle level
+measure_ham20 <- telemetry_data_hamilton_2020 %>% 
+   filter(throttle<100) %>% 
+   group_by(throttle) %>% 
+   summarise(mean_speed = mean(speed), mean_rpm = mean(rpm))
+ 
+  measure_ver21 <- telemetry_data_verstappen_2021 %>% 
+   filter(throttle<100) %>% 
+   group_by(throttle) %>% 
+   summarise(mean_speed = mean(speed), mean_rpm = mean(rpm))
+  
+#Use slice to ectract the first 5 measure and the last five measure of Hamilton in 2020
+first_last_ham20 <- bind_rows(
+  slice_head(measure_ham20, n = 5),
+  slice_tail(measure_ham20, n = 5)
+)
+
+#Use slice to ectract the first 5 measure and the last five measure of Verstappen in 2021
+first_last_ver21 <- bind_rows(
+  slice_head(measure_ver21, n = 5),
+  slice_tail(measure_ver21, n = 5)
+)
+
+# Unit the results with mutate
+first_last_combined <- bind_rows(
+  mutate(first_last_ham20, driver = "Hamilton 2020"),
+  mutate(first_last_ver21, driver = "Verstappen 2022"))
+# Print the results
+print(first_last_combined)
+```
+
+The lower standard deviation in 2021 indicates that Hamilton’s performance was more consistent, possibly due to a more stable car setup and further adaptation to driving conditions. However, the fastest lap time was slower in 2021, primarily due to the regulatory changes that reduced downforce and, consequently, the overall speed of the cars.
+
+Mean Speed: Verstappen’s 2021 car generally achieves higher mean speeds across various throttle positions compared to Hamilton’s 2020 car, suggesting advancements in aerodynamic efficiency, power unit performance, or overall car setup. Mean RPM: The mean RPM values are also higher for Verstappen’s car at comparable throttle positions, indicating potentially better engine tuning or more aggressive gear ratios.
+
+## Technical Changes in Formula 1 from 2021 to 2022
+
+The 2022 Formula 1 season introduced a comprehensive overhaul of technical regulations, aimed at enhancing the racing spectacle and improving car performance. These changes are designed to increase overtaking opportunities, reduce aerodynamic turbulence, and improve the overall aesthetics of the cars. Here, we outline the key technical changes implemented between the 2021 and 2022 seasons. ### Ground-Effect Floor One of the most significant changes for 2022 is the introduction of a ground-effect floor. The new cars feature two long underfloor tunnels that create a ground effect, generating more suction under the car to pull it closer to the tarmac. This innovation ensures that a larger portion of the downforce is produced from underneath the car, which was a popular concept in the 1970s and ’80s in Formula 1. By enhancing the ground effect, the new design aims to improve cornering speeds and overall grip while reducing the reliance on complex top-side aerodynamics. ### Simplified Front Wing and Sharp New Rear Wing The 2022 cars also boast a completely redesigned front wing and a sharp new rear wing. The simplified front wing is designed to manage airflow more efficiently, directing it inwards rather than outwards. This change reduces the turbulent air sent towards trailing cars, promoting closer racing and increasing overtaking opportunities. The new rear wing retains the DRS (Drag Reduction System) but with a curved design that may render it slightly less impactful. These aerodynamic refinements not only improve performance but also contribute to the sleek, modern appearance of the 2022 cars. ### 18-Inch Tyres with Wheel Winglets Another notable change is the introduction of 18-inch tires, replacing the previous 13-inch versions. These larger tires are expected to enhance the handling characteristics of the cars, providing better grip and stability. Alongside the bigger tires, the 2022 cars feature wheel winglets, small aerodynamic devices designed to direct airflow away from the rear wing. These winglets help reduce aerodynamic drag and improve the efficiency of the overall aero package, contributing to the car’s performance and aesthetics. ### Conclusion The technical changes for the 2022 Formula 1 season mark a significant evolution in car design and performance. By reintroducing ground-effect aerodynamics, simplifying wing structures, and upgrading to larger tires, the new regulations aim to create more exciting racing with improved handling and closer competition. These innovations reflect Formula 1’s ongoing commitment to advancing technology while enhancing the spectacle of the sport. Expected results Improved Stability: Telemetry will reveal improved stability and grip levels, reflected in more consistent cornering speeds and less variation in throttle and brake usage. Lap Time Consistency: Telemetry data will likely show more consistent lap times due to the enhanced aerodynamic stability and improved tire performance. This consistency will be reflected in lower standard deviations of lap times. Throttle and Brake Application: Improved handling and stability will be evident in telemetry data through smoother throttle and brake application curves, indicating more controlled and precise driving inputs. Speed Profiles: The telemetry will reveal changes in speed profiles, particularly in how cars accelerate out of corners and maintain higher speeds through turns due to better grip and downforce. Conclusion-The telemetry performance data for the 2022 Formula 1 season is expected to highlight the benefits of the new technical regulations. Increased downforce, improved aerodynamic efficiency, and better tire performance will all be evident in the detailed telemetry readings. These changes will contribute to more consistent lap times, better handling, and more competitive racing dynamics. By closely analyzing telemetry data, teams will be able to fine-tune their setups and strategies to maximize the advantages offered by the new generation of F1 cars, leading to an overall enhancement in the racing spectacle.
+
+QUALIFICA 2021-22
+
+```{r}
+# Upload the Leclerc's telemetry measurement of the qualifying sesskon in Bahrain 2022
+telemetry_data_leclerc_2022 <- load_driver_telemetry(
+  season = 2022,
+  round = 1,  # Bahrain GP
+  session = "Q",  # Qualifying session
+  driver = "LEC",
+  log_level = "WARNING"
+)
+
+#extract the measurement we are interest in.
+metrics_leclerc_2022 <- c(
+  final_time = max(telemetry_data_leclerc_2022$time),
+  avg_rpm = mean(telemetry_data_leclerc_2022$rpm),
+  avg_throttle_time = mean(telemetry_data_leclerc_2022$throttle),
+  max_speed = max(telemetry_data_leclerc_2022$speed)
+)
+
+#Create a dataframe with the metrics.
+df <- data.frame(
+  Pilot = c("Verstappen 2021", "Leclerc 2022"),
+  Final_Time = c(metrics_verstappen_2021["final_time"], metrics_leclerc_2022["final_time"]),
+  Avg_RPM = c(metrics_verstappen_2021["avg_rpm"], metrics_leclerc_2022["avg_rpm"]),
+  Avg_Throttle_Time = c(metrics_verstappen_2021["avg_throttle_time"], metrics_leclerc_2022["avg_throttle_time"]),
+  Max_Speed = c(metrics_verstappen_2021["max_speed"], metrics_leclerc_2022["max_speed"])
+)
+
+# Print the dataframe
+print(df)
+```
+
+```{r}
+#Create the throttle graph to compare Vestappen in 2021 and Leclerc in 2022.
+lec<- telemetry_data_leclerc_2022
+data2122 <- bind_rows(lec, ver )
+
+
+ggplot(data2122, aes(distance, throttle, color = driver_code)) +
+  geom_line() +
+  theme_minimal()
+```
+
+The comparison between Verstappen’s 2021 performance and Leclerc’s 2022 performance highlights how incremental technological advancements and strategic adjustments can impact car behavior and driver performance. Verstappen’s higher average RPM and faster lap time in 2021 suggest a more aggressive engine tuning and possibly better overall car setup for that season. On the other hand, Leclerc’s higher throttle time and top speed in 2022 indicate improvements in handling and aerodynamic efficiency, reflecting ongoing development efforts.
+
+GARA 2021-2022
+
+```{r}
+#Upload the Leclerc mesurement from the Excel file.
+fastest_lec22_R <- min(Datasetf1$time_lec22)
+upper_limit <- 1.1 * fastest_lec22_R
+
+filtered_data_lec22_R <- Datasetf1[Datasetf1$time_lec22 <= upper_limit, ]
+
+# Calculate the mean  and the standard deviation of the remaining lap.
+average_lap_time_lec22_R <- mean(filtered_data_lec22_R$time_lec22)
+standard_deviation_lec22 <- sd(filtered_data_lec22_R$time_lec22)
+
+# Create a data frame to compare the results
+df <- data.frame(
+  Pilot = c("Hamilton 2021", "Leclerc 2022"),
+  Average_Lap_Time= c(average_lap_time_ham21, average_lap_time_lec22_R),
+  Standard_Deviation= c(standard_deviation_ham21_R, standard_deviation_lec22))
+print(df)
+```
+
+```{r}
+#Insert a graph where we compare the race pace of Hamilton in 2021 (lightblue) and Leclerc in 2022 (red) 
+gfg_plot <- ggplot() +   
+     geom_line(data = Datasetf1, aes(x = laps, y = time_ham21), color = "lightblue") + 
+     geom_line(data = Datasetf1, aes(x = laps, y = time_lec22), color = "red") +
+     theme_dark_f1(axis_marks = TRUE) +
+  labs(x = "Lap Number", y = "Time (seconds)") 
+ gfg_plot
+```
+
+```{r}
+#Use filter and group by to see the mean speed of the drivers at a certain throttle level
+  measure_lec22 <- telemetry_data_leclerc_2022 %>% 
+   filter(throttle<100) %>% 
+   group_by(throttle) %>% 
+   summarise(mean_speed = mean(speed), mean_rpm = mean(rpm))
+  
+#Use slice to ectract the first 5 measure and the last five measure of Leclerc in 2022.
+first_last_lec22 <- bind_rows(
+  slice_head(measure_lec22, n = 5),
+  slice_tail(measure_lec22, n = 5)
+)
+#Unit the results with mutate
+first_last_combined <- bind_rows(
+  mutate(first_last_lec22, driver = "Leclerc 2022"),
+  mutate(first_last_ver21, driver = "Verstappen 2021")
+)
+
+# Print the results
+print(first_last_combined)
+```
+
+The comparison between Leclerc’s performance in 2022 and Hamilton’s in 2021 highlights the impact of significant regulatory changes and car development cycles on performance consistency and speed. Leclerc’s higher standard deviation indicates greater variability in his lap times, likely due to the challenges of adapting to the new 2022 car regulations. Meanwhile, Hamilton’s lower standard deviation and faster lap times in 2021 reflect the culmination of development and optimization within the established regulatory framework of that year.
+
+Mean Speed: Verstappen’s 2021 car generally achieves higher mean speeds at comparable throttle positions, particularly at very high throttle positions, indicating better top-end performance. Mean RPM: Verstappen’s car maintains higher mean RPMs at both low and high throttle positions, suggesting a different power unit configuration or more aggressive gearing strategy.
+
+## Technical Changes in Formula 1 from 2022 to 2023
+
+In this final part of our analysis, we focus on understanding how one year of development can enhance the performance of Formula 1 cars. Unlike previous seasons, the transition from 2022 to 2023 did not involve major regulatory changes imposed by the FIA. Instead, the primary regulatory adjustments during the 2022 season aimed to help the lower-performing teams close the gap with the leaders. However, these changes are not expected to significantly impact our analysis, as we are concentrating on data from the best-performing teams.
+
+QUALIFICA 2022-2023
+
+```{r}
+#Upload the Verstappens's telemetry measurement of the qualifying sesskon in Bahrain 2023
+telemetry_data_verstappen_2023 <- load_driver_telemetry(
+  season = 2023,
+  round = 1,  # Bahrain GP
+  session = "Q",  # Qualifying
+  driver = "VER",
+  log_level = "WARNING"
+)
+# extract the measurement we are interest in.
+metrics_verstappen_2023 <- c(
+  final_time = max(telemetry_data_verstappen_2023$time),
+  avg_rpm = mean(telemetry_data_verstappen_2023$rpm),
+  avg_throttle_time = mean(telemetry_data_verstappen_2023$throttle),
+  max_speed = max(telemetry_data_verstappen_2023$speed)
+)
+# Create a dataframe with the metrics.
+df <- data.frame(
+  Pilot = c("Verstappen 2023", "Leclerc 2022"),
+  Final_Time = c(metrics_verstappen_2023["final_time"], metrics_leclerc_2022["final_time"]),
+  Avg_RPM = c(metrics_verstappen_2023["avg_rpm"], metrics_leclerc_2022["avg_rpm"]),
+  Avg_Throttle_Time = c(metrics_verstappen_2023["avg_throttle_time"], metrics_leclerc_2022["avg_throttle_time"]),
+  Max_Speed = c(metrics_verstappen_2023["max_speed"], metrics_leclerc_2022["max_speed"])
+)
+
+# Print the dataframe
+print(df)
+```
+
+```{r}
+#Create the throttle graph to compare Vestappen in 2023 and Leclerc in 2022.
+ver23 <- telemetry_data_verstappen_2023
+data2223 <- bind_rows(lec, ver23 )
+
+ggplot(data2223, aes(distance, throttle, color = driver_code)) +
+  geom_line() +
+  theme_minimal()
+```
+
+The comparison between Verstappen’s 2023 performance and Leclerc’s 2022 performance highlights the continuous advancements in car technology and strategic optimizations that impact driver performance. Verstappen’s higher average RPM, faster lap time, shorter throttle time, and higher maximum speed in 2023 suggest significant improvements in engine tuning, aerodynamics, and overall car setup. GARA 2022-2023
+
+```{r}
+#Upload the Verstappen mesurement from the Excel file.
+fastest_ver23_R <- min(Datasetf1$time_ver23)
+upper_limit <- 1.1 * fastest_ver23_R
+
+filtered_data_ver23_R <- Datasetf1[Datasetf1$time_ver23 <= upper_limit, ]
+
+# Calculate the mean  and the standard deviation of the remaining lap.
+average_lap_time_ver23_R <- mean(filtered_data_ver23_R$time_ver23)
+standard_deviation_ver23 <- sd(filtered_data_ver23_R$time_ver23)
+
+#Create a data frame to compare the results
+df <- data.frame(
+  Pilot = c("Verstappen 2023", "Leclerc 2022"),
+  Average_Lap_Time= c(average_lap_time_ver23_R, average_lap_time_lec22_R),
+  Standard_Deviation= c(standard_deviation_ver23, standard_deviation_lec22))
+print(df)
+```
+
+```{r}
+#Use filter and group by to see the mean speed of the drivers at a certain throttle level
+ measure_ver23 <- telemetry_data_verstappen_2023 %>% 
+   filter(throttle<100) %>% 
+   group_by(throttle) %>% 
+   summarise(mean_speed = mean(speed), mean_rpm = mean(rpm))
+  
+#Use slice to ectract the first 5 measure and the last five measure of Leclerc in 2022.
+first_last_ver23 <- bind_rows(
+  slice_head(measure_ver23, n = 5),
+  slice_tail(measure_ver23, n = 5)
+)
+
+#Unit the results with mutate
+first_last_combined <- bind_rows(
+  mutate(first_last_lec22, driver = "Leclerc 2022"),
+  mutate(first_last_ver23, driver = "Verstappen 2023")
+)
+
+# Print the results
+print(first_last_combined)
+```
+
+```{r}
+#Insert a graph where we compare the race pace of Verstappen in 2023 (yellow) and Leclerc in 2022 (red) 
+gfg_plot <- ggplot() +   
+     geom_line(data = Datasetf1, aes(x = laps, y = time_lec22), color = "red") + 
+     geom_line(data = Datasetf1, aes(x = laps, y = time_ver23), color = "yellow") +
+     theme_dark_f1(axis_marks = TRUE) +
+   labs(x = "Lap Number", y = "Time (seconds)") 
+ gfg_plot
+```
+
+The comparison between Leclerc’s performance in 2022 and Verstappen’s in 2023 highlights the significant impact of continuous development and adaptation in Formula 1. Verstappen’s lower standard deviation indicates greater consistency, suggesting that his team had a better handle on the car’s performance and setup. His significantly faster lap time in 2023 reflects the advancements made by teams in optimizing the new regulations introduced in 2022.
+
+Mean Speed: Verstappen’s 2023 car generally achieves higher or comparable mean speeds at most throttle positions compared to Leclerc’s 2022 car, indicating effective power unit performance and aerodynamics. Mean RPM: Verstappen’s car maintains higher mean RPMs at several throttle positions, suggesting efficient engine performance and possibly more aggressive gearing or power unit settings.
+
+## Conclusion
+
+Overall, this project has demonstrated how technical changes, regulatory adjustments, and ongoing development efforts shape the performance of F1 cars. The dynamic interplay of these factors underscores the complexity and high-stakes nature of Formula 1, where teams must constantly innovate and adapt to maintain competitiveness. By analyzing telemetry data and performance metrics, we gain a deeper understanding of the evolution of F1 technology and the strategies employed by teams and drivers to achieve optimal performance.
+
+This project not only provides valuable insights into the technical aspects of F1 racing but also highlights the importance of data analysis in understanding and optimizing car performance. As Formula 1 continues to evolve, ongoing research and analysis will be crucial in staying ahead of the curve and pushing the boundaries of what is possible in motorsport.

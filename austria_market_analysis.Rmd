@@ -1,0 +1,1399 @@
+---
+title: "Austria Market Analysis"
+output: html_document
+---
+
+The setwd() function in R is used to set the working directory, specifying where files will be read and saved during execution. In the code, the working directory points to a folder on my computer where project files are stored. Before running the script, users must replace the path with the location of their own project files. To find their folder’s path, users can navigate to it on their computer, copy the full directory address, and update it in the setwd() function.
+
+```{r}
+# setwd("path/to/project")  # set to the folder containing the data
+```
+
+## Library
+
+```{r, message=FALSE, warning=FALSE}
+# Packages used in the analysis (reconstructed from the code)
+library(tidyverse)   # dplyr, tidyr, ggplot2, stringr, forcats
+library(eurostat)    # Eurostat API
+library(readxl)
+library(sf)          # shapefiles and maps
+library(kableExtra)  # tables
+library(RColorBrewer)
+library(reshape2)
+```
+
+## Population Evolution
+
+```{r}
+democrafic_information <-get_eurostat("tps00001", time_format = "num")
+```
+
+```{r}
+democrafic_information |> 
+  mutate(time_numeric = as.numeric(as.character(TIME_PERIOD))) |>  # Replace 'TIME_PERIOD' with the actual name if different
+  filter(geo == "AT" & time_numeric <= 2023 & time_numeric >= 2014) |> 
+    mutate(values_MIL = round(values / 1000000, 3)) |> 
+    pivot_wider(c(-values, -indic_de, -geo, -TIME_PERIOD), names_from = "time_numeric", values_from = "values_MIL") |>  # Replace 'TIME_PERIOD' with the actual name if different
+    kbl() |> 
+  kable_minimal()
+```
+
+## Population density
+
+```{r}
+shapefile <- st_read("./Dataset_Market_Analysis_Austria_G7/LAU_RG_01M_2021_3035.shp") %>%
+  filter(str_detect(`CNTR_CODE`, "AT"))
+```
+
+```{r}
+data <- read_excel("./Dataset_Market_Analysis_Austria_G7/population_density.xlsx")
+shapefile <- shapefile %>% rename(ID = LAU_ID)
+data <- data %>%
+  mutate(ID = as.character(ID))
+shapefile <- shapefile %>%
+  mutate(ID = as.character(ID))
+data <- shapefile %>%
+  left_join(data, by = "ID")
+data <- data %>%
+  mutate(density_range = cut(`pop/km²`,
+                             breaks = c(0, 10, 50, 100, 200, 300, 500, 1000, 1500, 2000, 2500, Inf),
+                             labels = c("0-10", "11-50", "51-100", "101-200", "201-300",
+                                        "301-500", "501-1000", "1001-1500", "1501-2000",
+                                        "2001-2500", ">2500")))
+ggplot(data = data) +
+  geom_sf(aes(fill = density_range), color = "grey30", size = 0.01) +
+  scale_fill_manual(values = c(
+    "0-10" = "#FFFFCC", "11-50" = "#FFEDA0", "51-100" = "#FED976",
+    "101-200" = "#FEB24C", "201-300" = "#FD8D3C", "301-500" = "#FC4E2A",
+    "501-1000" = "#E31A1C", "1001-1500" = "#BD0026", "1501-2000" = "#800026",
+    "2001-2500" = "#67000D", ">2500" = "#4D000D"),
+    na.translate = FALSE) +
+  labs(title = "Population Density in Austria by Municipality",
+       fill = "Population Density Ranges") +
+  theme_minimal() +
+  theme(
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank()) +
+  annotate("text", x = Inf, y = -Inf, label = "Source: Statistics Austria",
+           hjust = 1, vjust = -1, size = 3, fontface = "italic", color = "black")
+```
+
+## Population by age cohort
+
+```{r}
+get_eurostat("tps00010", time_format = "num") |>
+  filter(geo=="AT" & TIME_PERIOD<=2023 & TIME_PERIOD>=2013) |>
+  ggplot(aes(x=TIME_PERIOD,y=values,fill=indic_de))+
+  geom_col(colour="black",alpha=.6,width=1)+
+  geom_text(aes(x=TIME_PERIOD, y=values, label=paste(values,"%",sep="")),position = position_stack(vjust = 0.5),size=3)+
+  scale_x_continuous(breaks=2023:2013,minor_breaks=2023:2013)+
+  theme_bw()+
+  scale_fill_brewer(palette = "Set1",labels=c("<14","15-24","25-49","50-64","65-79",">80"))+
+  labs(title="Population by age cohort",
+       x = "Year",
+       y = "%",
+       fill="Age range",
+       caption="Eurostat (tps00010/tps00001)")+
+  theme(legend.position="right",
+        legend.text=element_text(size=6),
+        legend.key.size = unit(.5, "cm"),
+        axis.text=element_text(size=8),
+        axis.title=element_text(size=14,face="bold"),
+        axis.text.x = element_text(angle = 45, hjust = 1, size=8))
+```
+
+## Unemployment rate
+
+```{r}
+get_eurostat("tepsr_wc170", time_format = "num") |> 
+  filter(geo == "AT" & TIME_PERIOD >= time_range[1] & TIME_PERIOD <= time_range[10]) |> 
+  filter(age == "Y20-64") |> 
+  ggplot(aes(x = TIME_PERIOD, y = values)) + 
+  geom_area(alpha = 0.8, fill = "#1f77b4", color = "black") + 
+  geom_text(aes(label = paste(values, "%", sep = "")), size = 4, vjust = -1) + 
+  scale_x_continuous(breaks = time_range[1]:time_range[10], minor_breaks = time_range[1]:time_range[10]) +
+  ylim(0, 7) + 
+  theme_bw() + 
+  labs(
+    title = "Unemployment Rate",
+    subtitle = "Y20-64",
+    y = "%",
+    x = "Year",
+    fill = "",
+    caption = "Eurostat (tepsr_wc170)"
+  ) + 
+  theme(
+    panel.background = element_rect(fill = "white", color = NA),
+    panel.grid = element_blank(),
+    plot.background = element_rect(fill = "white", color = NA),
+    axis.line = element_line(color = "black"),
+    legend.position = "right",
+    axis.text = element_text(size = 8),
+    legend.text = element_text(size = 6),
+    legend.key.size = unit(0.5, "cm"),
+    axis.title = element_text(size = 14, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8)
+  )
+```
+
+## Unemployment by region
+
+```{r}
+unemployment_by_region <- get_eurostat("lfst_r_lfu3rt", time_format = "num")
+```
+
+```{r}
+at.data <- unemployment_by_region%>% filter(TIME_PERIOD==2023 & age == "Y20-64" & str_detect(geo, "AT"))
+codes <- read_xlsx("./Dataset_Market_Analysis_Austria_G7/NUTS2021-NUTS2024.xlsx", sheet = 1) %>%
+  filter(`NUTS level` == 2) %>% # Only 
+  filter(str_detect(`NUTS Code`, "AT")) # Only regions containing "AT" in the NUTS_ID
+unemployment_by_region <- right_join(at.data, codes, by = c("geo" = "NUTS Code")) %>%
+  select(-c(`NUTS level`, `Country code`, `Country order`, `#`)) %>%
+  rename(region = `NUTS label`)
+austria.reg <- st_read("./Dataset_Market_Analysis_Austria_G7/NUTS_RG_01M_2024_3035.shp")
+```
+
+```{r}
+geographical_data <- full_join(
+  at.data,
+  austria.reg,
+  by = c("geo" = "NUTS_ID") # Replace with actual column name in shapefile
+)
+ggplot(geographical_data %>% filter(TIME_PERIOD == 2023), aes(geometry = geometry, fill = values)) +
+  geom_sf() +
+  scale_fill_viridis_c(option = "plasma", name = "Unemployment rate (%)") +
+  theme_void() +
+  theme(legend.position = "bottom") +
+  labs(
+    title = "Unemployment Rate in Austria by Province",
+    subtitle = "Working Age Population (20-64 years)",
+    caption = "Source: Eurostat")
+```
+
+## Unemployment Rate Overall EU Countries
+
+```{r}
+countries_EU <- c("IT","AT","BE","FR","DE","EL","PT","ES","FI")
+get_eurostat("tepsr_wc170", time_format = "num") |>
+  filter(geo%in%countries_EU & TIME_PERIOD>=2012 & TIME_PERIOD<=2023) |>
+  filter(age == "Y15-74") |>group_by(geo)|>
+  ggplot(aes(x=TIME_PERIOD,y=values,label=round(values,1),fill=geo,color=geo))+
+  geom_line(alpha=.6, size=1)+
+  geom_point(alpha=1,pch=21,size=3,fill="white")+
+  scale_color_brewer(palette = "Set1")+
+  scale_x_continuous(breaks=2012:2023,minor_breaks=2012:2023)+
+  theme_bw()+
+  labs(title="Unemployment Rate overall EU countries ",
+       subtitle="2012-2023",
+       y = "%",
+       x= "Year",
+       fill="Geography",
+       caption="Eurostat (tepsr_wc170)")+
+  theme(legend.position="right",
+        axis.text=element_text(size=10),
+        legend.text=element_text(size=8),
+        legend.key.size = unit(.7, "cm"),
+        axis.title=element_text(size=14,face="bold"),
+        axis.text.x = element_text(angle = 45, hjust = 1,size=8))
+```
+
+## Unemployment rate by age cohort
+
+```{r}
+get_eurostat("tepsr_wc170", time_format = "num") |>
+  filter(geo=="AT" & TIME_PERIOD>=2012 & TIME_PERIOD<=2023) |>
+  filter(age != "Y15-74") |>
+  ggplot(aes(x = TIME_PERIOD, y = values, fill = age)) +
+  geom_col(colour = "black", alpha = .8, position = position_dodge(.9)) +
+  scale_x_continuous(breaks = 2012:2023, minor_breaks = 2012:2023) +
+  theme_bw() +
+  scale_fill_brewer(palette = "Spectral") +
+  labs(
+    title = "Unemployment Rate",
+    subtitle = "by Age Cohort",
+    y = "%",
+    x = "Year",
+    fill = "Age cohort",
+    caption = "Eurostat (tepsr_wc170)"
+  ) +
+  theme(
+    legend.position = "right",
+    axis.text = element_text(size = 8),
+    legend.text = element_text(size = 8),
+    legend.key.size = unit(.5, "cm"),
+    axis.title = element_text(size = 14, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8))
+```
+
+## GDP per capita
+
+```{r}
+get_eurostat("tec00115", time_format = "num") |> 
+  filter(geo == "AT" & TIME_PERIOD >= time_range[1] + 1 & TIME_PERIOD <= time_range[10] & unit == "CLV_PCH_PRE_HAB") |> 
+  ggplot(aes(x = TIME_PERIOD, y = values, label = values, fill = values)) +
+    geom_hline(yintercept = 0, color = "red", linetype = 2) +
+    geom_line(linetype = 2) +
+    geom_point(shape = 22, alpha = .8, size = 8) +
+    geom_text(hjust = .5, size = 2.5, color = "black") +
+    scale_fill_gradient(low = "red", high = "green") +
+    scale_x_continuous(breaks = time_range[1]:time_range[10], minor_breaks = time_range[1]:time_range[2], limits = c(time_range[1], time_range[10])) +
+    theme_bw() +
+    labs( title = "GDP per capita (% change on previous year, real values)", y = "%", x = "Year", fill = "value", caption = "Eurostat (tec00115)") +  
+    theme(
+        legend.position = "none", 
+        axis.text = element_text(size = 8), 
+        axis.title = element_text(size = 14, face = "bold"), 
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 8))
+```
+
+## Consumption of food as percentage of GDP*
+
+```{r}
+food <- get_eurostat("tps00001", time_format = "num") |>
+  filter(geo=="AT" & TIME_PERIOD<=2013 & TIME_PERIOD>=2023) |>
+  mutate(values_MIL=round(values/1000000,3)) |>
+  pivot_wider(c(-values,-indic_de,-geo),names_from ="TIME_PERIOD", values_from ="values_MIL")
+warnings=FALSE
+consumption_of_food <- get_eurostat('nama_10_co3_p3', time_format = "num")
+```
+
+```{r}
+countries_EU <- c("IT","AT","BE","FR","DE","EL","PT","ES","FI","SK")
+food <- consumption_of_food |> filter(coicop=="CP011") |> filter(geo %in% countries_EU & unit == "PC_GDP")
+food |> filter(TIME_PERIOD==2022) |>
+  ggplot(aes(x=fct_reorder(geo,values),y=values,fill=values))+
+  geom_col(color="black",position=position_dodge(.9))+
+  scale_fill_gradient(low="yellow",high="red")+
+  theme_bw()+
+  labs(title="Consumption of Food (% of GDP)",
+       subtitle ="Year 2022",
+       y = "%",
+       x= "Country",
+       fill="value",
+       caption="Eurostat (nama_10_co3_p3)")+
+  theme(legend.position="none",
+        axis.text=element_text(size=8),
+        axis.title=element_text(size=14,face="bold"),
+        axis.text.x = element_text(angle = 45, hjust = 1,size=8))
+```
+
+## Market Volumes*
+
+```{r}
+mvolumesAustria <- read_excel("./Dataset_Market_Analysis_Austria_G7/mvolumesAustria.xlsx", col_names = TRUE)
+mvolumesAustria |>
+  pivot_longer(names_to = "Year", values_to = "Volume", `2014`:`2023`) |>
+  filter(Category == "Sweet Biscuits, Snack Bars and Fruit Snacks" &
+           Geography == "Austria" &
+           (`Data_Type` == "Total Volume") &
+           Year <= time_range[10] &
+           Year >= time_range[1]) |>
+  ggplot(aes(x = as.integer(Year), y = Volume, label = round(Volume, 1))) +
+  geom_col(colour = "black", alpha = .8, fill = brewer.pal(3, "Set2")[1]) +
+  geom_text(aes(x = as.integer(Year), y = Volume, label = Volume), position = position_stack(vjust = 0.5), size = 3) +
+  scale_fill_brewer(palette = "Set2") +
+  scale_x_continuous(breaks = time_range[1]:time_range[10], minor_breaks = time_range[1]:time_range[10]) +
+  theme_bw() +
+  labs(
+    title = "Sweet Snacks: Volumes",
+    subtitle = "Italy",
+    y = "Tonnes ('000)",
+    x = "Year",
+    fill = "Volume",
+    caption = "Source: Passport/Euromonitor"
+  ) +
+  theme(
+    legend.position = "right", 
+    axis.text = element_text(size = 8), 
+    axis.title = element_text(size = 14, face = "bold"), 
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8))
+```
+
+## Market Values: Cross-country comparison
+
+```{r}
+countries_selected <- c("Western Europe", "Austria", "Portugal", "Germany")
+mvaluesAPGW <- read_excel("./Dataset_Market_Analysis_Austria_G7/mvaluesAPGW.xlsx", col_names = TRUE)
+mvaluesAPGW |> pivot_longer(names_to = "Year", values_to = "Value", 7:16) |>
+  filter(Category == "Sweet Biscuits, Snack Bars and Fruit Snacks" &
+           Geography %in% countries_selected &
+           `Data_Type` == "Retail Value RSP" &
+           Year <= time_range[10] &
+           Year >= time_range[1]) |>
+  group_by(Geography) |>
+  mutate(Fixed = (Value / Value[Year == time_range[1]]) * 100) |>
+  ggplot(aes(x = as.integer(Year), y = Fixed, label = round(Fixed, 1), fill = Geography, color = Geography)) +
+  geom_hline(yintercept = 100, color = "blue", linetype = 2) +
+  geom_line(alpha = .6, size = 1) +
+  geom_point(alpha = 1, pch = 21, size = 10, fill = "white") +
+  geom_text(size = 2.8) +
+  scale_color_brewer(palette = "Set2") +
+  scale_x_continuous(breaks = time_range[1]:time_range[9], minor_breaks = time_range[1]:time_range[9]) +
+  theme_bw() +
+  labs(
+    title = "Sweet Snacks: Values",
+    subtitle = paste(time_range[1], "-", time_range[9], ", Index (", time_range[1], "=100)", sep = ""),
+    y = "Index",
+    x = "Year",
+    color = "Country",
+    caption = "Source: Passport/Euromonitor"
+  ) +
+  theme(
+    legend.position = "right", 
+    axis.text = element_text(size = 8), 
+    axis.title = element_text(size = 14, face = "bold"), 
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8) 
+  )
+```
+
+## Average Prices
+
+```{r}
+countries_selected <- c("Western Europe", "Austria", "Portugal", "Germany")
+averagepriceconstantpAPGW <- read_excel("./Dataset_Market_Analysis_Austria_G7/averagepriceconstantpAPGW.xlsx", col_names = TRUE)
+d.price <-full_join(averagepriceconstantpAPGW |>
+      pivot_longer(names_to = "Year", values_to = "Value", `2014`:`2023`) |>
+      filter(Category == "Sweet Biscuits, Snack Bars and Fruit Snacks" & Geography %in% countries_selected & (`Data_Type` == "Retail Value RSP") & Year <= time_range[10] & Year >= time_range[1]), 
+    averagepriceconstantpAPGW |>
+      pivot_longer(names_to = "Year", values_to = "Volume", `2014`:`2023`) |>
+      filter(Category == "Sweet Biscuits, Snack Bars and Fruit Snacks" & Geography %in% countries_selected & `Data_Type` == "Retail Volume" & Year <= time_range[10] & Year >= time_range[1]),
+    by = c("Geography", "Year")
+  ) |>
+  select(Geography, Year, Value, Volume) |>
+  mutate(Avg_Price = round(Value / Volume, 3))
+d.price |> group_by(Geography) |> mutate(Fixed = (Avg_Price / Avg_Price[Year == time_range[1]]) * 100) |>
+  filter(Geography == "Austria") |>
+  ggplot(aes(x = as.integer(Year), y = Fixed, label = round(Fixed, 1))) +
+  geom_hline(yintercept = 100, color = "blue", linetype = 2) +
+  geom_line(alpha = .6, size = 1, color = brewer.pal(3, "Set2")[1]) +
+  geom_point(alpha = 1, pch = 21, size = 10, fill = "white", color = brewer.pal(3, "Set2")[2]) +
+  geom_text(size = 3) +
+  scale_x_continuous(breaks = time_range[1]:time_range[2], minor_breaks = time_range[1]:time_range[2]) +
+  theme_bw() +
+  labs(
+    title = "Sweet Snacks: Average Retail Price",
+    subtitle = paste(time_range[1], "-", time_range[2], ", Index (", time_range[1], "=100)", sep = ""),
+    y = "Index",
+    x = "Year",
+    color = "Country",
+    caption = "Source: Passport/Euromonitor"
+  ) +
+  theme(
+    legend.position = "right", 
+    axis.text = element_text(size = 8), 
+    axis.title = element_text(size = 14, face = "bold"), 
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8))
+```
+
+## Values Segments
+
+```{r}
+marketsegment <- read_excel("./Dataset_Market_Analysis_Austria_G7/marketsegment.xlsx", col_names = TRUE)
+marketsegment|>
+  pivot_longer(names_to = "Year", values_to = "Value", `2014`:`2023`) |>
+  filter(Geography == "Austria" & `Data Type` == "Retail Value RSP") %>%
+  filter(Category == "Fruit Snacks" | Category == "Snack Bars" | Category == "Sweet Biscuits") %>%
+  group_by(Geography, Year) %>%
+  mutate(Tot_Value = sum(Value)) %>%
+  mutate(Share = (Value / Tot_Value) * 100) %>%
+  mutate(Year = as.integer(Year)) %>%
+  ggplot(aes(x = Year, y = Share, fill = fct_reorder(Category, Share))) +
+  geom_col(colour = "black", alpha = .6, width = 1) +
+  geom_text(aes(x = Year, y = Share, label = paste(round(Share, 1), "%", sep = "")), position = position_stack(vjust = 0.5), size = 2) +
+  scale_x_continuous(breaks = time_range[1]:time_range[10], minor_breaks = time_range[1]:time_range[10]) +
+  theme_bw() +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    title = "Sweet Snacks segments",
+    subtitle = "Values, %",
+    x = "Year",
+    y = "%",
+    fill = "",
+    caption = "Passport/Euromonitor"
+  ) + # labels
+  theme(
+    legend.position = "bottom",
+    legend.text = element_text(size = 6),
+    legend.key.size = unit(.5, "cm"),
+    axis.text = element_text(size = 8),
+    axis.title = element_text(size = 14, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8)
+  ) +
+  coord_flip()
+```
+
+## Volumes Segments
+
+```{r}
+marketsegment %>% pivot_longer(names_to = "Year", values_to="Volume",`2014`:`2023`) %>%
+  filter(Geography == "Austria"  & `Data Type`=="Total Volume")  %>%
+  filter(Category=="Fruit Snacks" | Category=="Snack Bars" | Category=="Sweet Biscuits") %>%
+  group_by(Geography,Year) %>%
+  mutate(Tot_Volume=sum(Volume)) %>%
+  mutate(Share=(Volume/Tot_Volume)*100) %>%
+  mutate(Year=as.integer(Year)) %>%
+  ggplot(aes(x=Year,y=Share,fill=fct_reorder(Category,Share)))+
+  geom_col(colour="black",alpha=.6,width=1)+
+  geom_text(aes(x=Year, y=Share, label=paste(round(Share,1),"%",sep="")),position = position_stack(vjust = 0.5),size=2)+
+  scale_x_continuous(breaks=time_range[1]:time_range[10],minor_breaks=time_range[1]:time_range[10])+
+  theme_bw()+
+  scale_fill_brewer(palette = "Set2")+
+  labs(title="Sweet Snacks segments",
+       subtitle = "Volumes, %",
+       x = "Year",
+       y = "%",
+       fill="",
+       caption="Passport/Euromonitor")+ # labels
+  theme(legend.position="bottom",
+        legend.text=element_text(size=6),
+        legend.key.size = unit(.5, "cm"),
+        axis.text=element_text(size=8),
+        axis.title=element_text(size=14,face="bold"),
+        axis.text.x = element_text(angle = 45, hjust = 1, size=8))+
+  coord_flip()
+```
+
+## Sweet Snacks Subsegments
+
+```{r}
+marketsegment %>%
+  pivot_longer(names_to = "Year", values_to = "Value", `2014`:`2023`) %>%
+  filter(Geography == "Austria" & `Data Type` == "Retail Value RSP" & Year %in% time_range[1]:time_range[10]) %>%
+  filter(Category == "Dried Fruit" | Category == "Processed Fruit Snacks" | Category == "Cereal Bars" | Category == "Protein/Energy Bars" | Category == "Fruit and Nut Bars" | Category == "Chocolate Coated Biscuits" | Category == "Cookies" | Category == "Filled Biscuits" | Category == "Plain Biscuits" | Category == "Wafers") %>%
+  mutate(Main_category = ifelse(Category == "Dried Fruit" | Category == "Processed Fruit Snacks", "Fruit Snacks",
+                                ifelse(Category == "Cereal Bars" | Category == "Protein/Energy Bars" | Category == "Fruit and Nut Bars", "Snack Bars",
+                                       "Sweet Biscuits"))) %>%
+  group_by(Geography, Year,Main_category) %>%
+  mutate(Tot_Value = sum(Value)) %>%
+  mutate(Share = (Value / Tot_Value) * 100) %>%
+  mutate(Year = as.integer(Year)) %>%
+  ggplot(aes(x = Year, y = Share, fill = fct_reorder(Category, Share))) +
+  geom_col(colour = "black", alpha = .6, width = 1) +
+  geom_text(aes(x = Year, y = Share, label = paste(round(Share, 1), "%", sep = "")), position = position_stack(vjust = 0.5), size = 2) +
+  scale_x_continuous(breaks = time_range[1]:time_range[10], minor_breaks = time_range[1]:time_range[10]) +
+  facet_wrap(~Main_category, scales = "free_y") +
+  theme_bw() +
+  scale_fill_brewer(palette = "Set3") +
+  labs(
+    title = "Sweet Snacks Subsegments",
+    subtitle = "Values, %",
+    x = "Year",
+    y = "%",
+    fill = "",
+    caption = "Passport/Euromonitor"
+  ) + # labels
+  theme(
+    legend.position = "bottom",
+    legend.text = element_text(size = 6),
+    legend.key.size = unit(.5, "cm"),
+    axis.text = element_text(size = 8),
+    axis.title = element_text(size = 14, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8)
+  ) +
+  coord_flip()
+```
+
+## Demand and supply
+
+```{r}
+Demand_and_supply <- read_excel("./Dataset_Market_Analysis_Austria_G7/Demand_and_supply.xlsx", col_names = TRUE)
+volumes <- as.numeric(Demand_and_supply[2, 4:ncol(Demand_and_supply)])  
+avg_prices <- as.numeric(Demand_and_supply[3, 4:ncol(Demand_and_supply)])
+Demand_and_supply <- data.frame(
+  Year = time_range,
+  Volume = as.numeric(volumes),  
+  Avg_Price = as.numeric(avg_prices)  )
+ggplot(Demand_and_supply, aes(x = Volume, y = Avg_Price, size = Volume, label = Year)) +
+  geom_point(shape = 21, color = "black", fill = "gray", alpha = 0.6) +
+  geom_text(color = "black", size = 4, fontface = "bold") +
+  scale_size(range = c(5, 15)) +
+  labs(title = "Sweet Snacks",
+       x = "Quantity (000 Tonnes)",
+       y = "Average Price (EUR)") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.title.x = element_text(size = 12, face = "bold"),
+    axis.title.y = element_text(size = 12, face = "bold"))
+```
+
+## Share of revenue
+
+```{r}
+Market_size_retail_value <- read_excel("./Dataset_Market_Analysis_Austria_G7/Market_size_retail_value.xlsx", col_names = TRUE, skip = 1)
+ice_cream <- as.numeric(Market_size_retail_value[2, 6:ncol(Market_size_retail_value)])
+Sauvory_snack <- as.numeric(Market_size_retail_value[3, 6:ncol(Market_size_retail_value)])
+Sweet_Biscuits <- as.numeric(Market_size_retail_value[4, 6:ncol(Market_size_retail_value)])
+Confectionery <- as.numeric(Market_size_retail_value[1, 6:ncol(Market_size_retail_value)])
+share_of_revenue <- data.frame(
+  Year = time_range,
+  Ice_Cream = ice_cream,
+  Savory_Snack = Sauvory_snack,
+  Sweet_Biscuits = Sweet_Biscuits,
+  Confectionery = Confectionery)
+share_of_revenue_long <- melt(share_of_revenue, id.vars = "Year",
+                  variable.name = "Category",
+                  value.name = "Share")
+share_of_revenue_long$Total_Share <- ave(share_of_revenue_long$Share, share_of_revenue_long$Year, FUN = sum)
+share_of_revenue_long$Share_Percentage <- (share_of_revenue_long$Share / share_of_revenue_long$Total_Share) * 100
+ggplot(share_of_revenue_long, aes(x = Year, y = Share_Percentage, fill = Category)) +
+  geom_bar(stat = "identity", position = position_dodge(), color = "black") +
+  scale_fill_manual(values = c("#D0F0C0", "#F5A9BC", "#A9A9F5", "#FFCC99")) +
+  labs(title = "Austria, Share of Revenues (RSP, Constant Prices) in Percentage",
+       x = "Year",
+       y = "Retail Value Share (%)") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
+## Income and Consumption
+
+```{r}
+cons_per_capita <- read_excel("./Dataset_Market_Analysis_Austria_G7/GDP_and_Total_volume.xlsx", col_names = TRUE, skip = 1)
+cons_per_capita_filter <- cons_per_capita |>
+  pivot_longer(names_to = "time", values_to = "values", 6:15) |>
+  filter(!time == "2012",
+         Data_Type == "Total Volume (Tonnes)")
+cons_per_capita2 <- cons_per_capita_filter |>
+  mutate(values = replace_na(as.numeric(values), 0)) |>  
+  mutate(percentage_variation = (values - lag(values)) / lag(values) * 100) |> 
+  mutate(percentage_variation = replace_na(percentage_variation, 0))  
+GDP_PC <- get_eurostat("tec00115", time_format = "num") |>
+  filter(geo == "AT" & TIME_PERIOD >= 2014 & TIME_PERIOD <= 2023 &
+           unit == "CLV_PCH_PRE_HAB")
+ggplot() +
+  geom_hline(yintercept = 0, color = "black", linetype = 2, size = 0.75) +
+  geom_line(data = GDP_PC, aes(x = as.numeric(TIME_PERIOD), y = values, color = "GDP_PC"), size = 1.2) +
+  geom_point(data = GDP_PC, aes(x = as.numeric(TIME_PERIOD), y = values, color = "GDP_PC"), alpha = 0.8, pch = 16, size = 3.3) +
+  geom_line(data = cons_per_capita2, aes(x = as.numeric(time), y = percentage_variation, color = "cons_per_capita"), size = 1.2) +
+  geom_point(data = cons_per_capita2, aes(x = as.numeric(time), y = percentage_variation, color = "cons_per_capita"), alpha = 0.8, pch = 16, size = 3.3) +
+  scale_color_manual(values = c("GDP_PC" = "red", "cons_per_capita" = "darkgreen"),
+                     labels = c("Volumes per capita", "GDP per capita")) +
+  scale_x_continuous(breaks = 2014:2023, minor_breaks = 2014:2023) +
+  theme_bw() +
+  labs(title = "GDP and Consumption (per Capita)",
+       x = "Year",
+       y = "%",
+       fill = "value",
+       caption = "Euromonitor") +
+  theme(legend.position = "right",
+        axis.text = element_text(size = 8),
+        axis.title = element_text(size = 14, face = "bold"),
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 8)) +
+  guides(color = guide_legend(title = NULL))
+```
+
+## Comparison of prices and Demand Curves between Countries
+
+```{r}
+Prices_and_Demand_Curves_between_Countries <- read_excel("./Dataset_Market_Analysis_Austria_G7/Prices_and_Demand_Curves_between_Countries.xlsx", col_names = TRUE)
+prices_data <- Prices_and_Demand_Curves_between_Countries[Prices_and_Demand_Curves_between_Countries$`Data Type` == "Retail Value RSP", ]
+quantities_data <- Prices_and_Demand_Curves_between_Countries[Prices_and_Demand_Curves_between_Countries$`Data Type` == "Total Volume (Tonnes)", ]
+
+Austria_prices_numeric <- prices_data[1, 6:ncol(prices_data)]
+Belgium_prices_numeric <- prices_data[2, 6:ncol(prices_data)]
+Switzerland_prices_numeric <- prices_data[3, 6:ncol(prices_data)]
+
+Austria_quantity_numeric <- quantities_data[1, 6:ncol(quantities_data)]
+Belgium_quantity_numeric <-  quantities_data[2, 6:ncol(quantities_data)]
+Switzerland_quantity_numeric <-  quantities_data[3, 6:ncol(quantities_data)]
+
+Austria_prices_index <- (Austria_prices_numeric / Austria_prices_numeric$`2014`) * 100
+Belgium_prices_index <- (Belgium_prices_numeric / Belgium_prices_numeric$`2014`) * 100
+Switzerland_prices_index <- (Switzerland_prices_numeric / Switzerland_prices_numeric$`2014`) * 100
+
+Austria_quantity_index <- (Austria_quantity_numeric / Austria_quantity_numeric$`2014`) * 100
+Belgium_quantity_index <- (Belgium_quantity_numeric / Belgium_quantity_numeric$`2014`) * 100
+Switzerland_quantity_index <- (Switzerland_quantity_numeric / Switzerland_quantity_numeric$`2014`) * 100
+
+comparison_indexed <- data.frame(
+  years = time_range,
+  Austria_prices_index = as.numeric(Austria_prices_index),
+  Belgium_prices_index = as.numeric(Belgium_prices_index),
+  Switzerland_prices_index = as.numeric(Switzerland_prices_index),
+  Austria_quantity_index = as.numeric(Austria_quantity_index),
+  Belgium_quantity_index = as.numeric(Belgium_quantity_index),
+  Switzerland_quantity_index = as.numeric(Switzerland_quantity_index))
+comparison_long_price_indexed <- melt(
+comparison_indexed,
+  id.vars = "years",
+  measure.vars = c("Austria_prices_index", "Belgium_prices_index", "Switzerland_prices_index"),
+  variable.name = "Country",
+  value.name = "Price")
+comparison_long_quantity_indexed <- melt(
+  comparison_indexed,
+  id.vars = "years",
+  measure.vars = c("Austria_quantity_index", "Belgium_quantity_index", "Switzerland_quantity_index"),
+  variable.name = "Country",
+  value.name = "Quantity")
+ggplot() +
+  geom_line(data = comparison_long_price_indexed, aes(x = years, y = Price, color = Country), size = 1.5) +
+  geom_line(data = comparison_long_quantity_indexed, aes(x = years, y = Quantity, color = Country), linetype = "dashed", size = 1.5) +
+  scale_color_manual(values = c(
+    "Austria_prices_index" = "green",
+    "Belgium_prices_index" = "orange",
+    "Switzerland_prices_index" = "grey",
+    "Austria_quantity_index" = "black",
+    "Belgium_quantity_index" = "red",
+    "Switzerland_quantity_index" = "yellow" )) +
+  labs(
+    title = "Indexed Prices and Quantities of Sweet Snacks (2014-2023)",
+    subtitle = "Prices on solid lines, quantities on dashed lines (2014 = 100)",
+    x = "Year",
+    y = "Index (2014 = 100)" ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 8),
+    plot.title = element_text(size = 12, face = "bold"),
+    plot.subtitle = element_text(size = 10, face = "italic"))
+```
+
+## Number of enterprises
+
+```{r}
+num_of_enterprises_old <- get_eurostat("sbs_na_ind_r2", time_format = "num") |> 
+  filter(geo == "AT" & indic_sb == "V11110")
+```
+
+```{r}
+num_of_enterprises_new <- get_eurostat("sbs_ovw_act", time_format = "num") |> 
+  filter(geo == "AT" & indic_sbs == "ENT_NR")
+```
+
+```{r}
+num_of_enterprises_total <- bind_rows(num_of_enterprises_old, num_of_enterprises_new)
+num_of_enterprises_total <- num_of_enterprises_total |> 
+  filter(nace_r2 %in% c("C", "C10", "C107", "C1072")) |> 
+  mutate(time = as.numeric(TIME_PERIOD)) |> 
+  filter(TIME_PERIOD >= 2014 & TIME_PERIOD <= 2022) |> 
+  group_by(nace_r2) |> 
+  mutate(Index = (values / values[TIME_PERIOD == 2014]) * 100) 
+ggplot(num_of_enterprises_total, aes(x = as.integer(time), y = Index, label = round(Index, 1), color = nace_r2)) + 
+  geom_hline(yintercept = 100, color = "blue", linetype = 2) +  
+  geom_line(alpha = .5, linewidth = 1) +  
+  geom_point(alpha = 1, pch = 21, size = 8, color = "black", fill = "white") +  
+  geom_text(size = 2.5, color = "black", check_overlap = TRUE) +  
+  scale_x_continuous(breaks = 2014:2023, minor_breaks = 2014:2023) +  
+  scale_fill_brewer(palette = "Set1") +  
+  scale_color_brewer(palette = "Set1", labels = c("Manufacturing (C)", "Food (C10)", "Bakery (C107)", "Rusks and biscuits (C1072)")) +  # Set color palette for line
+  ylim(94, 141) +  
+  theme_bw() +  
+  labs(
+    title = "Number of Enterprises",
+    subtitle = "2014 - 2023",
+    x = "Years",
+    y = "Index (starting from 100)",
+    color = "Sector:",
+    caption = "Source: Eurostat (sbs_na_ind_r2 and sbs_ovw_act)") + 
+  theme(
+    legend.position = "bottom",  
+    legend.text = element_text(size = 8),
+    legend.key.size = unit(.5, "cm"),
+    axis.text = element_text(size = 8),
+    axis.title = element_text(size = 14, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8))
+```
+
+## Average employees per company
+
+```{r}
+avr_emp_old <- get_eurostat("sbs_na_ind_r2", time_format = "num") |> 
+  filter(
+    geo == "AT", 
+    indic_sb %in% c("V16110", "V11110"), 
+    TIME_PERIOD %in% 2014:2020, 
+    nace_r2 %in% c("C", "C10", "C107", "C1072")) |> 
+  pivot_wider(names_from = "indic_sb", values_from = "values") |> 
+  mutate(avg_value = V16110 / V11110) |> 
+  mutate(source = "sbs_na_ind_r2")  
+avr_emp_new <- get_eurostat("sbs_ovw_act", time_format = "num") |> 
+  filter(
+    geo == "AT", 
+    indic_sbs %in% c("EMP_NR", "ENT_NR"), 
+    TIME_PERIOD %in% 2021:2022, 
+    nace_r2 %in% c("C", "C10", "C107", "C1072")) |> 
+  pivot_wider(names_from = "indic_sbs", values_from = "values") |> 
+  mutate(avg_value = EMP_NR / ENT_NR) |> 
+  mutate(source = "sbs_ovw_act") 
+avr_emp_total <- bind_rows(
+  avr_emp_old |> rename(EMP_NR = V16110, ENT_NR = V11110),
+  avr_emp_new )
+avr_emp_total <- avr_emp_total |> 
+  mutate(sector = case_when(
+    nace_r2 == "C" ~ "Manufacturing",
+    nace_r2 == "C10" ~ "Food",
+    nace_r2 == "C107" ~ "Bakery",
+    nace_r2 == "C1072" ~ "Rusks and Biscuits"
+  ))
+ggplot(avr_emp_total, aes(x = as.integer(TIME_PERIOD), y = avg_value, fill = sector)) + 
+  geom_col(position = position_dodge(0.8), color = "black", alpha = 0.8) + 
+  scale_x_continuous(breaks = 2014:2022, minor_breaks = 2014:2022) + 
+  theme_bw() + 
+  scale_fill_manual(
+    values = c("Bakery" = "#4DAF4A", "Manufacturing" = "#E41A1C", "Food" = "#377EB8", "Rusks and Biscuits" = "#984EA3"))  + 
+  labs(
+    title = "Average Employees per Company by Sector", 
+    subtitle = "Austria, 2014–2022", 
+    y = "Average Number of Employees", 
+    x = "Year", 
+    fill = "Sector", 
+    caption = "Source: Eurostat (sbs_na_ind_r2 & sbs_ovw_act)") + 
+  theme(
+    legend.position = "bottom", 
+    legend.text = element_text(size = 8), 
+    legend.key.size = unit(0.5, "cm"), 
+    axis.text = element_text(size = 8), 
+    axis.title = element_text(size = 14, face = "bold"), 
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8))
+```
+
+## Hours worked per employee
+
+```{r}
+avr_hours_worked_old <- get_eurostat("sbs_na_ind_r2", time_format = "num")
+avr_hours_worked_old <- avr_hours_worked_old |> 
+  filter(geo == "AT", indic_sb == "V16150") |> 
+  filter(nace_r2 %in% c("C", "C10", "C107", "C1072")) |> 
+  mutate(time = as.numeric(TIME_PERIOD)) |> 
+  filter(TIME_PERIOD <= 2020, TIME_PERIOD >= 2014)
+avr_hours_worked_new <- get_eurostat("sbs_ovw_act", time_format = "num")
+avr_hours_worked_new <- avr_hours_worked_new |> 
+  filter(geo == "AT", indic_sbs == "HW_NR") |> 
+  filter(nace_r2 %in% c("C", "C10", "C107", "C1072")) |> 
+  mutate(time = as.numeric(TIME_PERIOD)) |> 
+  filter(TIME_PERIOD %in% 2021:2022)
+avr_hours_worked_total <- bind_rows(avr_hours_worked_old, avr_hours_worked_new)
+avr_hours_worked_total <- avr_hours_worked_total  |> 
+  group_by(nace_r2) |> 
+  mutate(Index = (values / values[TIME_PERIOD == 2014]) * 100)
+avr_hours_worked_total |> 
+  ggplot(aes(x = as.integer(TIME_PERIOD), y = Index, label = round(Index, 1), color = nace_r2)) +
+  geom_hline(yintercept = 100, color = "blue", linetype = 2) +  
+  geom_line(alpha = .5, size = 1) + 
+  geom_point(alpha = 1, pch = 21, size = 8, color = "black", fill = "white") + 
+  geom_text(aes(fill = nace_r2), size = 2.5, color = "black", check_overlap = TRUE) +
+  scale_x_continuous(breaks = 2014:2022, minor_breaks = 2014:2022) + 
+  scale_fill_brewer(palette = "Set1") + 
+  scale_color_brewer(palette = "Set1", labels = c("Manufacturing(C)", "Food(C10)", "Bakery(C107)", "Rusks and biscuits(C1072)")) + 
+  ylim(90, 125) +  
+  theme_bw() + 
+  labs(title = "Hours worked per employee",
+       subtitle = paste(2014, "-", 2022, sep = ""),
+       x = "Years",
+       y = "Index (starting from 100)",
+       color = "Sector:",
+       caption = "Source: Eurostat (sbs_na_ind_r2 & sbs_ovw_act)") +
+  theme(legend.position = "bottom",
+        legend.text = element_text(size = 8),
+        legend.key.size = unit(.5, "cm"),
+        axis.text = element_text(size = 8),
+        axis.title = element_text(size = 14, face = "bold"),
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 8))
+```
+
+## Investments
+
+```{r}
+investment_old <- get_eurostat("sbs_na_ind_r2", time_format = "num") |> 
+  filter(
+    geo == "AT",
+    indic_sb %in% c("V13310", "V12120"),
+    nace_r2 %in% c("C", "C10", "C107", "C1073"),
+    TIME_PERIOD %in% 2014:2020 ) |> 
+  pivot_wider(names_from = indic_sb, values_from = values) |> 
+  mutate(expenditure_percentage = (V13310 / V12120) * 100) |> 
+  select(TIME_PERIOD, nace_r2, expenditure_percentage) |> 
+  mutate(source = "sbs_na_ind_r2")
+investment_new <- get_eurostat("sbs_ovw_act", time_format = "num") |> 
+  filter(
+    geo == "AT",
+    indic_sbs %in% c("EXPN_SAL_BEN_MEUR", "VAL_OUT_MEUR"),
+    nace_r2 %in% c("C", "C10", "C107", "C1073"),
+    TIME_PERIOD %in% 2021:2023
+  ) |> 
+  pivot_wider(names_from = indic_sbs, values_from = values) |> 
+  mutate(expenditure_percentage = (EXPN_SAL_BEN_MEUR / VAL_OUT_MEUR) * 100) |> 
+  select(TIME_PERIOD, nace_r2, expenditure_percentage) |> 
+  mutate(source = "sbs_ovw_act")  
+investment_total <- bind_rows(investment_old, investment_new)
+investment_total <- investment_total |> 
+  mutate(sector = case_when(
+    nace_r2 == "C" ~ "Manufacturing",
+    nace_r2 == "C10" ~ "Food",
+    nace_r2 == "C107" ~ "Bakery",
+    nace_r2 == "C1073" ~ "Rusks and Biscuits"
+  ))
+ggplot(investment_total, aes(x = TIME_PERIOD, y = expenditure_percentage, fill = sector)) +
+  geom_col(position = position_dodge(0.9), color = "black", alpha = 0.8) +
+  scale_x_continuous(breaks = 2014:2023) +
+  scale_fill_manual(
+    values = c("Bakery" = "#4DAF4A", "Manufacturing" = "#E41A1C", "Food" = "#377EB8", "Rusks and Biscuits" = "#984EA3")) +
+  theme_bw() +
+  labs(
+    title = "Expenditure on Personnel as % of Production Value",
+    subtitle = "Austria, 2014–2022",
+    x = "Year",
+    y = "Expenditure on Personnel (% of Production Value)",
+    fill = "Sector",
+    caption = "Source: Eurostat (sbs_na_ind_r2 & sbs_ovw_act)" ) +
+  theme(
+    legend.position = "right",
+    legend.text = element_text(size = 8),
+    legend.key.size = unit(0.5, "cm"),
+    axis.text = element_text(size = 8),
+    axis.title = element_text(size = 8, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8))
+```
+
+## Capital intensity
+
+```{r}
+capital_intensity <- get_eurostat("sbs_ovw_act", time_format = "num") %>%
+  filter(
+    geo == "AT",  
+    indic_sbs %in% c("GRSINV_TNCA_MEUR", "NETTUR_MEUR" ),  
+    TIME_PERIOD == 2022 ) %>%
+  pivot_wider(
+    names_from = indic_sbs,
+    values_from = values) %>%
+  mutate(
+    capital_intensity = (GRSINV_TNCA_MEUR / NETTUR_MEUR ) * 100 ) %>%
+  select(geo, nace_r2, capital_intensity) %>%
+  mutate(
+    sector = case_when(
+      nace_r2 == "C" ~ "Manufacturing",
+      nace_r2 == "C10" ~ "Food",
+      nace_r2 == "C107" ~ "Bakery",
+      nace_r2 == "C1072" ~ "Snacks and biscuits",
+      TRUE ~ NA_character_  # Exclude other sectors
+    )) %>%
+  filter(!is.na(sector))  
+ggplot(capital_intensity, aes(x = sector, y = capital_intensity, fill = sector)) +
+  geom_col(color = "black", alpha = 0.8) +
+  labs(
+    title = "Capital Intensity (2022) in Austria by Sector",
+    x = "Sector",
+    y = "Capital Intensity (%)",
+    fill = "Sector",
+    caption = "Source: Eurostat (sbs_ovw_act)"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "bottom"
+  ) +
+  scale_fill_brewer(palette = "Set1")
+```
+
+## Raw materials
+
+```{r}
+raw_materials <-get_eurostat("apri_pi15_outa",time_format="num")
+```
+
+```{r}
+raw_materials |>
+  filter(geo=="AT") |> filter(unit=="I15") |> filter(p_adj=="RI") |>
+  filter(product == "011000" | product == "010000" | product == "061940"| product == "121000") |>
+  filter(TIME_PERIOD<=2023 & TIME_PERIOD>=2015) |>
+  mutate(index=(values/values[TIME_PERIOD==2015])*100) |>
+  ggplot(aes(x=as.integer(TIME_PERIOD), y=index, label=round(index,2), color=product))+
+  geom_hline(yintercept=100,color="blue",linetype=2)+
+  geom_line(alpha=.6, size=1)+
+  geom_point(alpha=1, pch=21, size=9, size=10, spoke=1, color="black", fill="white")+
+  scale_color_brewer(palette = "Set1", labels = c("Wheat and spelt", "Cereals", "Nuts and dried fruit", "Milk"), name= "Raw Materials")+
+  scale_x_continuous(breaks=2015:2022,minor_breaks=2015:2022)+
+  geom_text(aes(fill=product), size=2.5, color="black",check_overlap = T)+
+  theme_bw()+
+  labs(title="Cost of raw materials ",
+       subtitle = "Index (2015=100)",
+       y = "Index",
+       x="Year",
+       caption = "Source: Eurostat (apri_pi15_outa, 011000, 010000, 061940, 121000)" )+
+  theme(
+    legend.position = "right",
+    axis.text = element_text(size = 8),
+    axis.title = element_text(size = 14, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8))
+```
+
+## Expenditure on goods and services
+
+```{r}
+exp_on_goods_old <- get_eurostat("sbs_na_ind_r2", time_format = "num") |> 
+  filter(
+    geo == "AT", 
+    indic_sb %in% c("V13110", "V12120"), 
+    nace_r2 %in% c("C", "C10", "C107", "C1072"), 
+    TIME_PERIOD %in% 2014:2020) |> 
+  pivot_wider(names_from = indic_sb, values_from = values) |> 
+  mutate(expenditure_percentage = (V13110 / V12120) * 100) |> 
+  select(TIME_PERIOD, nace_r2, expenditure_percentage) |> 
+  mutate(source = "sbs_na_ind_r2")  # Add source column for reference
+exp_on_goods_new <- get_eurostat("sbs_ovw_act", time_format = "num") |> 
+  filter(
+    geo == "AT", 
+    indic_sbs %in% c("PUR_MEUR", "VAL_OUT_MEUR"), 
+    nace_r2 %in% c("C", "C10", "C107", "C1072"), 
+    TIME_PERIOD %in% 2021:2023 ) |> 
+  pivot_wider(names_from = indic_sbs, values_from = values) |> 
+  mutate(expenditure_percentage = (PUR_MEUR / VAL_OUT_MEUR) * 100) |> 
+  select(TIME_PERIOD, nace_r2, expenditure_percentage) |> 
+  mutate(source = "sbs_ovw_act")  
+exp_on_goods_total <- bind_rows(exp_on_goods_old, exp_on_goods_new)
+exp_on_goods_total <- exp_on_goods_total |> 
+  mutate(sector = case_when(
+    nace_r2 == "C" ~ "Manufacturing",
+    nace_r2 == "C10" ~ "Food",
+    nace_r2 == "C107" ~ "Bakery",
+    nace_r2 == "C1072" ~ "Rusks and Biscuits" ))
+ggplot(exp_on_goods_total, aes(x = TIME_PERIOD, y = expenditure_percentage, fill = sector)) + 
+  geom_col(position = position_dodge(0.9), color = "black", alpha = 0.8) + 
+  scale_x_continuous(breaks = 2014:2023) + 
+  theme_bw() + 
+   scale_fill_manual(
+    values = c("Bakery" = "#4DAF4A", "Manufacturing" = "#E41A1C", "Food" = "#377EB8", "Rusks and Biscuits" = "#984EA3")
+  )  + 
+  labs(
+    title = "Expenditure on Goods and Services as % of Production Value", 
+    subtitle = "Austria, 2014–2023", 
+    x = "Year", 
+    y = "Expenditure on Goods and Services (% of Production Value)", 
+    fill = "Sector", 
+    caption = "Source: Eurostat (sbs_na_ind_r2 & sbs_ovw_act)") + 
+  theme(
+    legend.position = "right", 
+    legend.text = element_text(size = 8), 
+    legend.key.size = unit(0.5, "cm"), 
+    axis.text = element_text(size = 8), 
+    axis.title = element_text(size = 10, face = "bold"), 
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8))
+```
+
+## Expenditure on personnel
+
+```{r}
+exp_on_pers_old <- get_eurostat("sbs_na_ind_r2", time_format = "num") |> 
+  filter(
+    geo == "AT", 
+    indic_sb %in% c("V13310", "V12120"), 
+    nace_r2 %in% c("C", "C10", "C107", "C1073"), 
+    TIME_PERIOD %in% 2014:2020) |> 
+  pivot_wider(names_from = indic_sb, values_from = values) |> 
+  mutate(expenditure_percentage = (V13310 / V12120) * 100) |> 
+  select(TIME_PERIOD, nace_r2, expenditure_percentage) |> 
+  mutate(source = "sbs_na_ind_r2")  # Add source for tracking
+exp_on_pers_new <- get_eurostat("sbs_ovw_act", time_format = "num") |> 
+  filter(
+    geo == "AT", 
+    indic_sbs %in% c("EXPN_SAL_BEN_MEUR", "VAL_OUT_MEUR"), 
+    nace_r2 %in% c("C", "C10", "C107", "C1073"), 
+    TIME_PERIOD %in% 2021:2023 ) |> 
+  pivot_wider(names_from = indic_sbs, values_from = values) |> 
+  mutate(expenditure_percentage = (EXPN_SAL_BEN_MEUR / VAL_OUT_MEUR) * 100) |> 
+  select(TIME_PERIOD, nace_r2, expenditure_percentage) |> 
+  mutate(source = "sbs_ovw_act")  
+exp_on_pers_total <- bind_rows(exp_on_pers_old, exp_on_pers_old)
+exp_on_pers_total <- exp_on_pers_total |> 
+  mutate(sector = case_when(
+    nace_r2 == "C" ~ "Manufacturing",
+    nace_r2 == "C10" ~ "Food",
+    nace_r2 == "C107" ~ "Bakery",
+    nace_r2 == "C1073" ~ "Rusks and Biscuits"
+  ))
+ggplot(exp_on_pers_total, aes(x = TIME_PERIOD, y = expenditure_percentage, fill = sector)) + 
+  geom_col(position = position_dodge(0.9), color = "black", alpha = 0.8) + 
+  scale_x_continuous(breaks = 2014:2023) + 
+  theme_bw() + 
+  scale_fill_brewer(palette = "Set1") + 
+  labs(
+    title = "Expenditure on Personnel as % of Production Value", 
+    subtitle = "Austria, 2014–2022", 
+    x = "Year", 
+    y = "Expenditure on Personnel (% of Production Value)", 
+    fill = "Sector", 
+    caption = "Source: Eurostat (sbs_na_ind_r2 & sbs_ovw_act)"
+  ) + 
+  theme(
+    legend.position = "right", 
+    legend.text = element_text(size = 8), 
+    legend.key.size = unit(0.5, "cm"), 
+    axis.text = element_text(size = 8), 
+    axis.title = element_text(size = 8, face = "bold"), 
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8))
+```
+
+## Market shares
+
+```{r}
+market_shares <- read_excel("./Dataset_Market_Analysis_Austria_G7/Market shares.xlsx", col_names = TRUE, skip = 5)
+market_shares <- market_shares[market_shares$Company_Name != "Others", ]
+market_shares <- market_shares[market_shares$Company_Name != "Private Label", ]
+time_frame <- c(2015:2023)
+colnames(market_shares)[5:13] <- time_frame
+market_shares_long <- market_shares %>%
+  pivot_longer(names_to = "Year", values_to = "Value", cols = 5:13)
+market_shares_long$Value <- as.numeric(market_shares_long$Value)
+market_shares_long <- market_shares_long %>%
+  group_by(Company_Name) %>%
+  filter(any(Value > 1)) %>%
+  ungroup()
+market_shares_long <- market_shares_long %>%
+  mutate(Company_Name = factor(Company_Name,
+                               levels = market_shares_long %>%
+                                 filter(Year == 2023) %>%
+                                 arrange(Value) %>%
+                                 pull(Company_Name)))
+
+num_companies <- length(unique(market_shares_long$Company_Name))
+dusty_pink <- "#D45D6A"
+dusty_orange <- "#D98C53"
+dusty_yellow <- "#D1B01E"
+dusty_green <- "#8C9F39"
+dusty_blue <- "#4B7F89"
+dusty_purple <- "#9A6B8B"
+custom_palette <- colorRampPalette(c(dusty_pink, dusty_orange, dusty_yellow, dusty_green, dusty_blue, dusty_purple))(num_companies)
+ggplot(market_shares_long, aes(x = as.integer(Year), y = Value, fill = Company_Name)) +
+  geom_col(color = "black", alpha = 0.8) +
+  geom_text(aes(label = sprintf("%.1f%%", Value)),
+            position = position_stack(vjust = 0.5), size = 2) +
+  scale_fill_manual(values = custom_palette) +
+  scale_x_continuous(breaks = 2015:2023) +
+  theme_bw() +
+  labs(title = "Market Shares",
+       subtitle = "Only companies >1%",
+       y = "%",
+       x = "Year",
+       fill = "Company Name",
+       caption = "Source: Passport/Euromonitor") +
+  theme(legend.position = "right",
+        axis.text = element_text(size = 8),
+        axis.title = element_text(size = 5, face = "bold"),
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 8))
+```
+
+## Private labels
+
+```{r}
+market_shares <- read_excel("./Dataset_Market_Analysis_Austria_G7/Market shares.xlsx", col_names = TRUE, skip = 5)
+colnames(market_shares)[5:13] <- time_range
+market_shares_long <- market_shares %>%
+  pivot_longer(names_to = "Year", values_to = "Value", 5:13)
+market_shares_long_filtered <- market_shares_long %>%
+  filter(Company_Name == "Private Label")
+market_shares_long_filtered$Value <- as.numeric(market_shares_long_filtered$Value)
+ggplot(market_shares_long_filtered, aes(x = as.integer(Year), y = Value, fill = Company_Name)) +
+  geom_col(colour = "black", fill = "grey", alpha = .8) +  # Set bar color to grey
+  geom_text(aes(x = as.integer(Year), y = Value, label = sprintf("%.1f%%", Value)),
+            position = position_stack(vjust = 0.5), size = 3) +
+  scale_fill_manual(values = c("Private Label" = "grey")) +  # Ensure that fill matches the grey color
+  scale_x_continuous(breaks = 2015:2023, minor_breaks = 2015:2023) +
+  theme_bw() +
+  labs(title = "Market Shares",
+       subtitle = paste("Private Labels"),
+       y = "%",
+       x = "Year",
+       color = "Country",
+       fill = "Company Name",
+       caption = "Source: Passport/Euromonitor") +
+  theme(legend.position = "none",  # Optional: removes legend since you only have "Private Label"
+        axis.text = element_text(size = 8),
+        axis.title = element_text(size = 14, face = "bold"),
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 8))
+```
+
+## C4
+
+```{r}
+C4_2015 <- tibble(
+  `Company Name` = c("Manner & Comp AG", "Bahlsen GmbH & Co KG", "Mondelez International Inc", "Griesson de Beukelaer GmbH & Co KG"),
+  Market_Share = c(19.6, 13.6, 5.7, 2.7))
+C4_2023 <- tibble(
+  `Company Name` = c("Manner & Comp AG", "Bahlsen GmbH & Co KG", "Mondelez International Inc", "Hero Group GmbH"),
+  Market_Share = c(20.4, 11.0, 5.7, 2.5))
+c4_index_2015 <- C4_2015 %>%
+  arrange(desc(Market_Share)) %>%
+  slice_head(n = 4) %>%
+  summarise(Year = 2015, C4_Index = sum(Market_Share))
+c4_index_2023 <- C4_2023 %>%
+  arrange(desc(Market_Share)) %>%
+  slice_head(n = 4) %>%
+  summarise(Year = 2023, C4_Index = sum(Market_Share))
+c4_index_combined <- bind_rows(c4_index_2015, c4_index_2023)
+c4_index_combined %>%
+  kable("html", col.names = c("Year", "C4 Index (%)"), align = 'c', caption = "C4 Index for 2015 and 2023") %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE
+  ) %>%
+  column_spec(1, bold = TRUE, color = "white", background = "darkblue") %>%
+  column_spec(2, bold = TRUE, color = "black", background = "lightgrey") %>%
+  row_spec(0, bold = TRUE, color = "white", background = "darkblue")
+```
+
+## C4 comparison
+
+```{r}
+C4_comparison <- data.frame(
+  Country = c("Germany", "Portugal", "Austria", "Italy", "Spain", "Greece", "France"),
+  C4_2015 = c(27.7, 24.8, 41.6, 40.2, 42.0, 47.4, 49.5),
+  C4_2023 = c(24.7, 22.6, 39.6, 35.8, 38.8, 48.2, 49.3))
+C4_comparison_long <- pivot_longer(
+  C4_comparison,
+  cols = starts_with("C4_"),
+  names_to = "Year",
+  names_prefix = "C4_",
+  values_to = "C4_Index")
+C4_comparison_long$Year <- factor(C4_comparison_long$Year, levels = c("2015", "2023"))
+C4_comparison_long <- C4_comparison_long %>%
+  group_by(Year) %>%
+  mutate(Country = reorder(Country, C4_Index)) %>%
+  ungroup()
+ggplot(C4_comparison_long, aes(x = C4_Index, y = Country, fill = Country == "Austria")) +
+  geom_bar(stat = "identity", position = "dodge", show.legend = FALSE) +
+  geom_text(aes(label = sprintf("%.1f", C4_Index)),
+            hjust = -0.1,
+            size = 3) + # Add labels
+  facet_wrap(~ Year, ncol = 1, strip.position = "top") +
+  scale_fill_manual(values = c("TRUE" = "#4B7F89", "FALSE" = "grey")) +
+  labs(
+    title = "C4 Index Cross-Country Comparison",
+    x = "%",
+    y = "",
+    fill = "Country") +
+  theme_minimal() +
+  theme(
+    strip.text = element_text(size = 12, face = "bold"),
+    axis.text.y = element_text(size = 10),
+    axis.text.x = element_text(size = 10),
+    plot.title = element_text(size = 14, face = "bold"),
+    panel.grid.major.y = element_blank(),  
+    panel.grid.minor = element_blank()
+  ) +
+  coord_cartesian(clip = "off")
+```
+
+## HHI
+
+```{r}
+Market_shares <- read_excel("./Dataset_Market_Analysis_Austria_G7/Market shares.xlsx", col_names = TRUE, skip = 5)
+calculate_hhi <- function(data, year) {
+  data %>%
+    select(`Company_Name`, !!sym(as.character(year))) %>%
+    rename(Market_Share = !!sym(as.character(year))) %>%
+    filter(!`Company_Name` %in% c("Private Labels", "Other")) %>%
+    mutate(
+      Market_Share = as.numeric(Market_Share),
+      Rescaled_Share = (Market_Share / sum(Market_Share, na.rm = TRUE)) * 100) %>%
+    summarise(HHI = sum(Rescaled_Share^2, na.rm = TRUE)) %>%
+    pull(HHI)}
+hhi_2015 <- calculate_hhi(Market_shares, 2015)
+hhi_2023 <- calculate_hhi(Market_shares, 2023)
+hhi_table <- data.frame(
+  Year = c(2015, 2023),
+  HHI = c(hhi_2015, hhi_2023))
+kable(hhi_table, col.names = c("Year", "HHI Index"), caption = "HHI Index for 2015 and 2023")
+```
+
+```{r}
+hhi_table %>%
+  kable(
+    "html", 
+    col.names = c("Year", "HHI Index"),  
+    align = 'c', 
+    caption = "HHI Index for 2015 and 2023" ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),  # Table styles
+    full_width = FALSE) %>%
+  column_spec(1, bold = TRUE, color = "white", background = "darkblue") %>%
+  column_spec(2, bold = TRUE, color = "black", background = "lightgrey") %>%
+  row_spec(0, bold = TRUE, color = "white", background = "darkblue")
+```
+
+## Distribution Channels
+
+```{r}
+distribution_channels <- read_excel("./Dataset_Market_Analysis_Austria_G7/distributionchannels.xlsx", col_names = TRUE)
+colnames(distribution_channels)[5:13] <- time_frame
+distribution_channels_long <- distribution_channels %>%
+  pivot_longer(names_to = "Year", values_to = "Value", 5:13)
+distribution_channels_long <- distribution_channels_long %>%
+  mutate(Outlet_Type = factor(Outlet_Type,
+                              levels = distribution_channels_long %>%
+                                filter(Year == 2015) %>%
+                                pull(Outlet_Type))) 
+distribution_channels_long <- distribution_channels_long %>%
+  mutate(Value = as.numeric(Value))
+num_companies <- length(unique(distribution_channels_long$Outlet_Type))
+dusty_pink <- "#D45D6A"   # Dusty bright pink
+dusty_orange <- "#D98C53"  # Dusty bright orange
+dusty_yellow <- "#D1B01E"  # Dusty bright yellow
+dusty_green <- "#8C9F39"    # Dusty bright green
+dusty_blue <- "#4B7F89"     # Dusty bright blue
+dusty_purple <- "#9A6B8B"   # Dusty bright purple
+custom_palette <- colorRampPalette(c(dusty_purple, dusty_blue, dusty_green, dusty_yellow, dusty_orange, dusty_pink))(10)
+ggplot(distribution_channels_long, aes(x = as.integer(Year), y = Value, fill = Outlet_Type)) +
+  geom_col(color = "black", alpha = 0.8) +
+  geom_text(aes(x = as.integer(Year), y = Value, label = sprintf("%.1f%%", Value)),
+            position = position_stack(vjust = 0.5), size = 2.5) +
+  scale_fill_manual(values = custom_palette) +  
+  scale_x_continuous(breaks = 2015:2023, minor_breaks = 2015:2023) +
+  theme_bw() +
+  labs(title = "Distribution Channels",
+       subtitle = "Time evolution",
+       y = "%",
+       x = "Year",
+       color = "Country",
+       fill = "Outlet Type",
+       caption = "Source: Passport/Euromonitor") +
+  theme(legend.position = "right",
+        axis.text = element_text(size = 8),
+        axis.title = element_text(size = 14, face = "bold"),
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 8))
+```
+
+## Financial position
+
+```{r}
+Liabilities_Manner_AG <- read_excel("./Dataset_Market_Analysis_Austria_G7/Liabilities_Manner_AG.xlsx", col_names = TRUE)
+net_position <- (Liabilities_Manner_AG[3, 2:ncol(Liabilities_Manner_AG)]) 
+financial_position <- data.frame(
+  Year = time_range,
+  Net_Position = as.numeric(net_position))
+ggplot(financial_position, aes(x = factor(Year), y = Net_Position, fill = "red")) +
+  geom_bar(stat = "identity", color = "black", width = 0.7, alpha = 0.7) +
+  labs(
+    title = "Manner AG",
+    subtitle = "Net Financial Position",
+    x = "Year",
+    y = "EURO (000)",
+    caption = "Source: Manner_Finanz-und Zwischenberichte") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = -0.1, vjust = -0.5, face = "bold"),
+    plot.subtitle = element_text(hjust = -0.1, vjust = -1.5),
+    legend.position = "none" ) +
+  geom_hline(yintercept = 0, color = "black")
+```
+
+## Net Income
+
+```{r}
+Retained_earnings_Manner_AG <- read_excel("./Dataset_Market_Analysis_Austria_G7/Retained_earnings_Manner_AG.xlsx", col_names = TRUE)
+retained_earnings <- (Retained_earnings_Manner_AG[1, 2:ncol(Retained_earnings_Manner_AG)])  
+retained_earnings <- data.frame(
+  Year = time_range,
+Retained_earnings = as.numeric(retained_earnings)  
+)
+ggplot(retained_earnings, aes(x = factor(Year), y = Retained_earnings)) +
+  geom_bar(stat = "identity", fill = "skyblue", color = "black") + 
+  labs(title = "Retained Earnings Over the Years", x = "Year", y = "Retained Earnings (in monetary units)") +
+  theme_minimal() +  # A clean theme
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+## Return on Sales
+
+```{r}
+return_on_sales<- read_excel("./Dataset_Market_Analysis_Austria_G7/Return_on_sales.xlsx", col_names = TRUE)
+return_on_sales <- (return_on_sales[1, 2:ncol(return_on_sales)])  # Retail Volume (Tonnes)
+return_on_sales <- data.frame(
+  Year = time_range,
+Return_on_sales = as.numeric(return_on_sales) 
+)
+ggplot(return_on_sales, aes(x = factor(Year), y = Return_on_sales)) +
+  geom_bar(stat = "identity", fill = "lightblue", color = "black") +  
+  labs(title = "Return on Sales Over the Years", 
+       x = "Year", 
+       y = "Return on Sales (%)") +  
+  theme_minimal() +  # A clean theme
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+## Return on Equity
+
+```{r}
+ROE <- read_excel("./Dataset_Market_Analysis_Austria_G7/Return_on_equity.xlsx", col_names = TRUE) %>%
+  select(-1) 
+Return_on_Equity <- data.frame(
+  year = time_range,
+  Roe = as.numeric(ROE))
+Return_on_Equity$color <- ifelse(Return_on_Equity$Roe < 0, "negative", "positive")
+ggplot(Return_on_Equity, aes(x = factor(year), y = Roe, fill = color)) +
+  geom_bar(stat = "identity", color = "black", width = 0.7, alpha = 0.7) +
+  labs(title = "Manner Ag",
+       subtitle = "Net income",
+       x = "year",
+       y = "EUR (000)",
+       caption = "Source: Manner_Finanz-und Zwischenberichte") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = -0.1, vjust = -0.5, face = "bold"),
+    plot.subtitle = element_text(hjust = -0.1, vjust = -1.5),
+    legend.position = "none" ) +
+  scale_fill_manual(values = c("negative" = "red", "positive" = "green")) +
+  geom_hline(yintercept = 0, color = "black")
+```
+
+## Brands
+
+```{r}
+Brand_shares_all_copy <- read_excel("./Dataset_Market_Analysis_Austria_G7/Brand_shares.xlsx", col_names = TRUE)
+Brand_long <- Brand_shares_all_copy %>%
+  pivot_longer(
+    cols = starts_with("20"),   
+    names_to = "Year",
+    values_to = "Index") %>%
+  mutate(Year = as.numeric(Year))  
+Brand_long <- Brand_long %>%
+  group_by(`Brand Name`) %>%     
+  mutate(Index = (Index / Index[Year == 2015]) * 100) %>%
+  ungroup()
+ggplot(Brand_long, aes(x = Year, y = Index, color = `Brand Name`, group = `Brand Name`)) +
+  geom_line(size = 1) +                        
+  geom_point(size = 3) +                     
+  labs(
+    title = "Market shares by brand",        
+    x = "Year",                            
+    y = "Index (2015 = 100)",             
+    color = "Brand",                         
+    caption = "Source: Passport/Euromonitor") +
+  theme_minimal() +                           
+  theme(legend.position = "bottom") +          
+  scale_y_continuous(breaks = seq(70, 130, by = 10)) +  
+  scale_x_continuous(breaks = seq(2015, 2023, by = 1)) + 
+  geom_hline(yintercept = 100, linetype = "dashed")
+```
+
+## GSM
+
+```{r}
+GSM <- data.frame(
+  Brand = c("Manner (Manner & Comp AG, Josef)", "Napoli (Manner & Comp AG, Josef)", "Fredi (Manner & Comp AG, Josef)"),
+  MarketShare_2023 = c(76.59, 20.00, 3.41),  
+  AverageGrowth = c(0.57, 0.31, 1.95))
+ggplot(GSM, aes(x = MarketShare_2023, y = AverageGrowth, label = Brand)) +
+  geom_point(color = "red", size = 2) +
+  geom_text(color = "red", hjust = 0.4, vjust = -1, size = 2.5) +
+  geom_vline(xintercept = 33.3, linetype = "solid", color = "black") +
+  geom_hline(yintercept = 0.6, linetype = "solid", color = "black") +
+  annotate("text", x = 7, y = 3, label = "Star", size = 3, fontface = "bold") +
+  annotate("text", x = 70, y = 3, label = "Question Mark", size = 3, fontface = "bold") +
+  annotate("text", x = 7, y = -2.5, label = "Cash Cow", size = 3, fontface = "bold") +
+  annotate("text", x = 70, y = -2.5, label = "Pet", size = 3, fontface = "bold") +
+  xlim(-10, 100) +
+  ylim(-5, 5) +
+  labs(
+    x = "Market share 2023 (%)",
+    y = "Average Yearly Growth (%, 2015-2023)",
+    title = "GSM for Josef Manner & Company",
+      caption = "Source: Passport/Euromonitor") +
+  theme_gray()+
+  theme(plot.title = element_text(face = "bold"),             
+        axis.title.x = element_text(face = "bold"),           
+        axis.title.y = element_text(face = "bold"))
+```
